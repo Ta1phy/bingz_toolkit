@@ -57,13 +57,30 @@ jobs:
           path: dist/  # 待上传的产物目录（与build.py输出目录对应）
           retention-days: 30  # 产物保留30天（默认90天，可按需调整）
 
-      # 步骤6：仅Release事件，上传产物到Release Assets（持久化，正式交付用）
-      - name: 上传正式产物到Release Assets
-        if: github.event_name == 'release'  # 仅Release触发时执行
+      # 步骤6：上传产物到最新Release Assets（push和release事件都触发）
+      - name: 获取最新Release标签
+        id: get_latest_release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const releases = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 1
+            });
+            if (releases.data.length > 0) {
+              core.setOutput('tag_name', releases.data[0].tag_name);
+            } else {
+              core.setOutput('tag_name', 'v1.0.0'); // 如果没有Release，使用默认标签
+            }
+
+      - name: 上传产物到最新Release Assets
         uses: softprops/action-gh-release@v2
         with:
-          files: |  # 产物匹配规则（与build.py生成的文件名对应，不可随意修改）
-            BingZ*
-            BingZ.app/**
+          tag_name: ${{ steps.get_latest_release.outputs.tag_name }}  # 使用最新Release标签
+          files: |  # 修正路径：产物实际在dist目录下
+            dist/BingZ*  # 匹配dist目录下所有以BingZ开头的文件
+            dist/BingZ.app/**  # 匹配macOS应用包
+          append: true  # 允许向现有Release添加资产，而非替换
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成，无需手动配置
