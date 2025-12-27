@@ -67,3 +67,18 @@ jobs:
             dist/BingZ工具包.app/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成，无需手动配置
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')  # 只在打标签时运行
+    steps:
+      - name: 下载构建产物
+        uses: actions/download-artifact@v3
+        
+      - name: 发布到GitHub Releases
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ./artifact/*  # 匹配构建产物路径
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
