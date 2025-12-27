@@ -79,15 +79,8 @@ jobs:
             }
 
       - name: 列出实际生成的文件（关键调试步骤）
-        run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            Get-ChildItem -Path dist/ -Force
-          else
-            ls -la dist/
-          fi
+        run: ls -la dist/  # 在Git Bash中，ls命令是可用的，支持-l和-a参数
         shell: bash
-        env:
-          RUNNER_OS: ${{ runner.os }}  # 获取当前运行器操作系统
 
       - name: 上传产物到最新Release Assets
         uses: softprops/action-gh-release@v2
