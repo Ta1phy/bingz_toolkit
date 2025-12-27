@@ -26,7 +26,7 @@ def build_macos():
         "pyinstaller",
         "--onefile",  # Use onefile mode to generate a single executable file
         "--windowed",
-        "--name=BingZwin",
+        "--name=BingZmac",
         "--icon=icon/Bingz.png",
         "--strip",  # Strip debug symbols to reduce size
         "--add-data=ai_tools.json:.",
