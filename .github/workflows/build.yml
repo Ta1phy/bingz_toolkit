@@ -1,5 +1,9 @@
 name: 跨平台打包
 
+# 添加权限设置
+permissions:
+  contents: write
+
 # 触发条件：推送到main分支 或 正式发布Release
 on:
   push:
@@ -81,7 +85,9 @@ jobs:
           files: |  # 修正路径：产物实际在dist目录下
             dist/BingZ*  # 匹配dist目录下所有以BingZ开头的文件
             dist/BingZ.app/**  # 匹配macOS应用包
-            dist/BingZ_Toolkit*  # 匹配BingZ_Toolkit开头的文件
-          append: true  # 允许向现有Release添加资产，而非替换
+            dist/BingZ-Toolkit*  # 匹配BingZ_Toolkit开头的文件
+            dist/BingZ Toolkit*  # 匹配带空格的实际文件名
+            dist/BingZ Toolkit.app/**  # 匹配macOS应用包（带空格）
+            dist/BingZ_Toolkit*  # 匹配下划线版本  
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成，无需手动配置
