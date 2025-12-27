@@ -2,15 +2,16 @@ import sys
 import json
 import os
 import webbrowser
+import requests
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QPushButton, QLabel, QLineEdit, QTextEdit,
     QFileDialog, QMessageBox, QScrollArea, QFrame, QDialog,
-    QMenu
+    QMenu, QProgressBar, QDialogButtonBox
 )
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QBrush
 from PyQt5.QtSvg import QSvgWidget
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
 ##
 # 功能：BingZ工具包主窗口
@@ -49,10 +50,255 @@ def resource_path(relative_path):
     # 开发环境
     return os.path.join(os.path.abspath('.'), relative_path)
 
+class UpdateChecker(QThread):
+    """更新检查线程"""
+    update_available = pyqtSignal(dict)
+    no_update = pyqtSignal()
+    error = pyqtSignal(str)
+    progress = pyqtSignal(int, str)
+    download_progress = pyqtSignal(int, str)
+    download_complete = pyqtSignal(str)
+    
+    def __init__(self, current_version, repo_owner, repo_name):
+        super().__init__()
+        self.current_version = current_version
+        self.repo_owner = repo_owner
+        self.repo_name = repo_name
+        self.api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
+    
+    def run(self):
+        try:
+            # 检查更新
+            self.progress.emit(20, "正在检查更新...")
+            response = requests.get(self.api_url, timeout=10)
+            response.raise_for_status()
+            self.progress.emit(50, "正在解析更新信息...")
+            release_info = response.json()
+            
+            latest_version = release_info["tag_name"]
+            
+            # 比较版本号
+            if self.is_newer_version(latest_version, self.current_version):
+                # 发现新版本
+                self.progress.emit(80, "发现新版本...")
+                
+                # 获取适合当前平台的资产
+                asset_info = self.get_platform_asset(release_info["assets"])
+                if asset_info:
+                    update_data = {
+                        "version": latest_version,
+                        "release_notes": release_info["body"],
+                        "asset": asset_info
+                    }
+                    self.progress.emit(100, "准备下载更新...")
+                    self.update_available.emit(update_data)
+                else:
+                    self.error.emit("未找到适合当前平台的更新包")
+            else:
+                self.progress.emit(100, "已是最新版本")
+                self.no_update.emit()
+        except Exception as e:
+            self.error.emit(f"检查更新失败: {str(e)}")
+    
+    def is_newer_version(self, latest, current):
+        """比较版本号，判断是否为新版本"""
+        try:
+            # 移除版本号前缀（如v1.0.0 -> 1.0.0）
+            latest = latest.lstrip('vV')
+            current = current.lstrip('vV')
+            
+            # 分割版本号为数字列表
+            latest_parts = list(map(int, latest.split('.')))
+            current_parts = list(map(int, current.split('.')))
+            
+            # 确保版本号位数相同
+            max_len = max(len(latest_parts), len(current_parts))
+            latest_parts.extend([0] * (max_len - len(latest_parts)))
+            current_parts.extend([0] * (max_len - len(current_parts)))
+            
+            # 比较版本号
+            for l, c in zip(latest_parts, current_parts):
+                if l > c:
+                    return True
+                elif l < c:
+                    return False
+            return False
+        except Exception:
+            return False
+    
+    def get_platform_asset(self, assets):
+        """获取适合当前平台的资产"""
+        current_platform = sys.platform
+        
+        for asset in assets:
+            asset_name = asset["name"].lower()
+            
+            if current_platform == "darwin":  # macOS
+                if "mac" in asset_name or "darwin" in asset_name:
+                    return asset
+            elif current_platform == "win32":  # Windows
+                if "win" in asset_name or "windows" in asset_name:
+                    return asset
+            elif current_platform == "linux":  # Linux
+                if "linux" in asset_name:
+                    return asset
+        
+        return None
+    
+    def download_update(self, asset_url, save_path):
+        """下载更新文件"""
+        try:
+            self.download_progress.emit(0, "准备下载...")
+            response = requests.get(asset_url, stream=True, timeout=30)
+            response.raise_for_status()
+            
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded = 0
+            
+            with open(save_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        progress = int((downloaded / total_size) * 100)
+                        self.download_progress.emit(progress, f"下载中: {progress}%")
+            
+            self.download_complete.emit(save_path)
+        except Exception as e:
+            self.error.emit(f"下载失败: {str(e)}")
+
+class UpdateDialog(QDialog):
+    """更新对话框"""
+    def __init__(self, parent=None, current_version="1.0.0", repo_owner="Ta1phy", repo_name="bingz_toolkit"):
+        super().__init__(parent)
+        self.current_version = current_version
+        self.repo_owner = repo_owner
+        self.repo_name = repo_name
+        self.update_checker = None
+        self.downloading = False
+        self.init_ui()
+        self.check_for_updates()
+    
+    def init_ui(self):
+        """初始化更新对话框"""
+        self.setWindowTitle("检查更新")
+        self.setFixedSize(400, 200)
+        self.setWindowModality(Qt.ApplicationModal)
+        
+        # 主布局
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # 标题
+        title_label = QLabel("BingZ工具包 - 更新检查")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        # 当前版本
+        version_label = QLabel(f"当前版本: {self.current_version}")
+        version_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(version_label)
+        
+        # 状态标签
+        self.status_label = QLabel("正在检查更新...")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.status_label)
+        
+        # 进度条
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        layout.addWidget(self.progress_bar)
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        
+        # 取消按钮
+        self.cancel_button = QPushButton("取消")
+        self.cancel_button.clicked.connect(self.close)
+        button_layout.addWidget(self.cancel_button)
+        
+        # 更新按钮（初始隐藏）
+        self.update_button = QPushButton("立即更新")
+        self.update_button.clicked.connect(self.download_update)
+        self.update_button.hide()
+        button_layout.addWidget(self.update_button)
+        
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+    
+    def check_for_updates(self):
+        """开始检查更新"""
+        self.update_checker = UpdateChecker(self.current_version, self.repo_owner, self.repo_name)
+        self.update_checker.update_available.connect(self.on_update_available)
+        self.update_checker.no_update.connect(self.on_no_update)
+        self.update_checker.error.connect(self.on_error)
+        self.update_checker.progress.connect(self.update_progress)
+        self.update_checker.start()
+    
+    def update_progress(self, progress, status):
+        """更新进度"""
+        self.progress_bar.setValue(progress)
+        self.status_label.setText(status)
+    
+    def on_update_available(self, update_data):
+        """发现更新"""
+        self.update_data = update_data
+        self.status_label.setText(f"发现新版本: {update_data['version']}")
+        self.cancel_button.setText("关闭")
+        self.update_button.show()
+    
+    def on_no_update(self):
+        """没有更新"""
+        self.status_label.setText("已是最新版本")
+        self.cancel_button.setText("关闭")
+    
+    def on_error(self, error_msg):
+        """错误处理"""
+        self.status_label.setText(error_msg)
+        self.cancel_button.setText("关闭")
+    
+    def download_update(self):
+        """下载更新"""
+        self.downloading = True
+        self.update_button.hide()
+        self.cancel_button.setText("取消")
+        
+        # 创建下载目录
+        download_dir = os.path.join(get_user_data_dir(), "downloads")
+        if not os.path.exists(download_dir):
+            os.makedirs(download_dir)
+        
+        # 设置保存路径
+        asset_name = self.update_data["asset"]["name"]
+        save_path = os.path.join(download_dir, asset_name)
+        
+        # 更新进度信号连接
+        self.update_checker.download_progress.connect(self.update_progress)
+        self.update_checker.download_complete.connect(self.on_download_complete)
+        self.update_checker.error.connect(self.on_error)
+        
+        # 开始下载
+        self.update_checker.download_update(self.update_data["asset"]["browser_download_url"], save_path)
+    
+    def on_download_complete(self, save_path):
+        """下载完成"""
+        self.status_label.setText("更新下载完成！")
+        self.cancel_button.setText("关闭")
+        QMessageBox.information(self, "下载完成", f"更新已下载到: {save_path}\n请手动安装。")
+        self.close()
+
 class AIToolManager(QMainWindow):
     def __init__(self):
         super().__init__()
         self.tools = []
+        
+        # 版本信息
+        self.current_version = "1.1"
+        self.repo_owner = "Ta1phy"
+        self.repo_name = "bingz_toolkit"
         
         # 创建用户数据目录
         self.data_dir = get_user_data_dir()
@@ -122,9 +368,25 @@ class AIToolManager(QMainWindow):
         )
         add_button.clicked.connect(self.add_tool_dialog)
 
+        # 检查更新按钮（圆角矩形样式）
+        update_button = QPushButton("检查更新")
+        update_button.setStyleSheet(
+            "QPushButton { "
+            "font-size: 12px; padding: 6px 12px; "
+            "background-color: #2196F3; color: white; "
+            "border: 2px solid black; border-radius: 15px; "
+            " } "
+            "QPushButton:hover { "
+            "background-color: #1976D2; "
+            "border: 2px solid black; "
+            " } "
+        )
+        update_button.clicked.connect(self.check_for_updates)
+
         
         top_layout.addStretch()
         top_layout.addWidget(add_button)
+        top_layout.addWidget(update_button)
         
         main_layout.addLayout(top_layout)
         
@@ -1153,6 +1415,11 @@ class AIToolManager(QMainWindow):
         
         dialog.close()
         QMessageBox.information(self, "成功", f"{name}已成功修改")
+    
+    def check_for_updates(self):
+        """检查更新"""
+        update_dialog = UpdateDialog(self, self.current_version, self.repo_owner, self.repo_name)
+        update_dialog.exec_()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
