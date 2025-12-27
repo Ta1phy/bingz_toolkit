@@ -78,13 +78,16 @@ jobs:
               core.setOutput('tag_name', 'v1.0.0'); // 如果没有Release，使用默认标签
             }
 
+      - name: 列出实际生成的文件（关键调试步骤）
+        run: ls -la dist/  # 列出dist目录下的实际文件名，便于调试
+
       - name: 上传产物到最新Release Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_latest_release.outputs.tag_name }}  # 使用最新Release标签
           files: |  # 修正路径：产物实际在dist目录下
             dist/*
-          append: true  # 关键：允许向现有Release添加资产
-          fail_on_unmatched_files: false  # 关键：避免因文件匹配失败而导致步骤失败 
+          overwrite_files: false  # 关键：不覆盖现有资产，相当于append=true的效果
+          fail_on_unmatched_files: false  # 关键：避免因文件匹配失败而导致步骤失败
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成，无需手动配置
