@@ -63,7 +63,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |  # 产物匹配规则（与build.py生成的文件名对应，不可随意修改）
-            dist/BingZ*
-            dist/BingZ.app/**
+            BingZ*
+            BingZ.app/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成，无需手动配置
