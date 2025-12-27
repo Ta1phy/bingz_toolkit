@@ -16,7 +16,7 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal
 ##
 # 功能：BingZ工具包主窗口
 # 作者：BingZ
-# 日期：2023-12-15
+# 日期：2025-12-15
 # 版本：1.1
 # 更新：2025-12-26
 # 新增功能：

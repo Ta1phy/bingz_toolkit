@@ -27,7 +27,6 @@ def build_macos():
         "--onefile",  # Use onefile mode to generate a single executable file
         "--windowed",
         "--icon=icon/Bingz.png",
-        "--name=BingZ Toolkit",
         "--strip",  # Strip debug symbols to reduce size
         "--add-data=ai_tools.json:.",
         "--add-data=icon:icon",
