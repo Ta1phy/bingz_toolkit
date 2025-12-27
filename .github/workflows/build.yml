@@ -65,5 +65,6 @@ jobs:
           files: |  # 产物匹配规则（与build.py生成的文件名对应，不可随意修改）
             BingZ*
             BingZ.app/**
+            BingZ_Toolkit*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成，无需手动配置
