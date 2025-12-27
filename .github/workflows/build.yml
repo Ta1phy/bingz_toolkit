@@ -83,11 +83,8 @@ jobs:
         with:
           tag_name: ${{ steps.get_latest_release.outputs.tag_name }}  # 使用最新Release标签
           files: |  # 修正路径：产物实际在dist目录下
-            dist/BingZ*  # 匹配dist目录下所有以BingZ开头的文件
-            dist/BingZ.app/**  # 匹配macOS应用包
-            dist/BingZ-Toolkit*  # 匹配BingZ_Toolkit开头的文件
-            dist/BingZ Toolkit*  # 匹配带空格的实际文件名
-            dist/BingZ Toolkit.app/**  # 匹配macOS应用包（带空格）
-            dist/BingZ_Toolkit*  # 匹配下划线版本  
+            dist/*
+          append: true  # 关键：允许向现有Release添加资产
+          fail_on_unmatched_files: false  # 关键：避免因文件匹配失败而导致步骤失败 
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成，无需手动配置
