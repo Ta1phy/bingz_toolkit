@@ -1,0 +1,37 @@
+[
+  {
+    "name": "ChatGPT",
+    "description": "OpenAI开发的强大语言模型，能够生成文本、回答问题、编写代码等。",
+    "features": "- 自然语言生成\n- 代码编写与调试\n- 知识问答\n- 创意内容生成\n- 多语言支持",
+    "url": "https://chat.openai.com",
+    "icon_path": "./icon/ChatGPT.jpg"
+  },
+  {
+    "name": "豆包",
+    "description": "专注解答各类编程难题，可优化代码、梳理技术知识点，能高效为用户的编程学习与项目开发提供有力支持",
+    "features": "- 文本到图像生成\n- 图像编辑\n- 风格迁移\n- 多种图像尺寸支持\n- 创意设计辅助",
+    "url": "https://www.doubao.com/chat",
+    "icon_path": "./icon/doubao.png"
+  },
+  {
+    "name": "GeoGPT",
+    "description": "GeoGPT是一个地学领域的大模型研究项目，旨在创建非盈利的科研公共产品，为全球地球科学研究提供全新视角和工具。",
+    "features": "地质问题解答、地球数据处理、文献知识检索、野外地考辅助",
+    "url": "https://geogpt.zero2x.org/cn/chatbox?sessionId=8d7d70ae-fbf8-49b5-a65c-f2644170febb",
+    "icon_path": "./icon/GeoGPT.svg"
+  },
+    {
+    "name": "Deepseek",
+    "description": "GeoGPT是一个地学领域的大模型研究项目，旨在创建非盈利的科研公共产品，为全球地球科学研究提供全新视角和工具。",
+    "features": "地质问题解答、地球数据处理、文献知识检索、野外地考辅助",
+    "url": "https://chat.deepseek.com/a/chat/s/5c85496a-582f-4045-a9ac-09b084d48edb",
+    "icon_path": "./icon/deepseek.png"
+  },
+    {
+    "name": "PolarisNet",
+    "description": "VPN站点",
+    "features": "19.9/月",
+    "url": "https://t.polarisnet.cloud/#/dashboard",
+    "icon_path": "./icon/polarisnet.png"
+  }
+]
