@@ -23,7 +23,14 @@ jobs:
       # 步骤1：检出仓库代码到GitHub Actions构建环境
       - name: 检出代码
         uses: actions/checkout@v4  # 官方检出动作，稳定可靠
-
+        
+      - name: 设置 Windows 终端编码为 UTF-8
+        if: matrix.os == 'windows-latest'  # 仅对 Windows 环境生效
+        run: |
+          chcp 65001  # Windows 命令：切换终端编码为 UTF-8（65001 对应 UTF-8）
+          set PYTHONIOENCODING=utf-8  # 设置 Python 环境变量，强制使用 UTF-8 编码
+        shell: cmd
+        
       # 步骤2：设置指定版本的Python环境，开启pip缓存（优化构建时间）
       - name: 设置Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
