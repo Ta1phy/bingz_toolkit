@@ -53,7 +53,7 @@ jobs:
       - name: 上传临时产物（Artifact）
         uses: actions/upload-artifact@v4
         with:
-          name: BingZ-Toolkit-${{ matrix.os }}  # 产物名称区分平台
+          name: BingZ${{ matrix.os }}  # 产物名称区分平台
           path: dist/  # 待上传的产物目录（与build.py输出目录对应）
           retention-days: 30  # 产物保留30天（默认90天，可按需调整）
 
@@ -81,6 +81,7 @@ jobs:
           files: |  # 修正路径：产物实际在dist目录下
             dist/BingZ*  # 匹配dist目录下所有以BingZ开头的文件
             dist/BingZ.app/**  # 匹配macOS应用包
+            dist/BingZ_Toolkit*  # 匹配BingZ_Toolkit开头的文件
           append: true  # 允许向现有Release添加资产，而非替换
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成，无需手动配置
