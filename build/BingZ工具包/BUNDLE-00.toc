@@ -1,0 +1,3 @@
+([('BingZ工具包',
+   '/Users/bingz/代码/Trae/Boring_bingz/bingz_sci_ai_tools/dist/BingZ工具包',
+   'EXECUTABLE')],)
