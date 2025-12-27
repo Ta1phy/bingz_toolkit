@@ -1,0 +1,62 @@
+name: 跨平台打包
+
+# 触发条件：推送到main分支 或 正式发布Release
+on:
+  push:
+    branches: [ main ]  # 仅main分支推送时触发（开发调试用）
+  release:
+    types: [ published ]  # 仅正式发布Release时触发（正式交付用）
+
+jobs:
+  build:
+    # 构建矩阵：多平台+指定Python版本，并行构建
+    strategy:
+      fail-fast: false  # 一个平台构建失败，不影响其他平台继续运行（便于排错）
+      matrix:
+        os: [ windows-latest, macos-latest ]  # 打包平台：Windows最新版、macOS最新版
+        python-version: [ '3.13' ]  # 匹配项目的Python版本（可按需修改为3.10、3.12等）
+
+    # 运行环境：对应矩阵中的操作系统
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      # 步骤1：检出仓库代码到GitHub Actions构建环境
+      - name: 检出代码
+        uses: actions/checkout@v4  # 官方检出动作，稳定可靠
+
+      # 步骤2：设置指定版本的Python环境，开启pip缓存（优化构建时间）
+      - name: 设置Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'  # 缓存pip依赖，后续构建无需重新下载
+
+      # 步骤3：升级pip并安装项目依赖+PyInstaller
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # 步骤4：运行build.py打包脚本，生成产物到dist/目录
+      - name: 运行打包脚本
+        run: python build.py
+
+      # 步骤5：上传产物到Artifact（临时存储，开发调试用）
+      - name: 上传临时产物（Artifact）
+        uses: actions/upload-artifact@v4
+        with:
+          name: BingZ-Toolkit-${{ matrix.os }}  # 产物名称区分平台
+          path: dist/  # 待上传的产物目录（与build.py输出目录对应）
+          retention-days: 30  # 产物保留30天（默认90天，可按需调整）
+
+      # 步骤6：仅Release事件，上传产物到Release Assets（持久化，正式交付用）
+      - name: 上传正式产物到Release Assets
+        if: github.event_name == 'release'  # 仅Release触发时执行
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |  # 产物匹配规则（与build.py生成的文件名对应，不可随意修改）
+            dist/BingZ工具包*
+            dist/BingZ工具包.app/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成，无需手动配置
