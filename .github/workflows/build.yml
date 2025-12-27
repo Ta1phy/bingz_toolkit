@@ -63,22 +63,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |  # 产物匹配规则（与build.py生成的文件名对应，不可随意修改）
-            dist/BingZ工具包*
-            dist/BingZ工具包.app/**
+            dist/BingZ*
+            dist/BingZ.app/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成，无需手动配置
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')  # 只在打标签时运行
-    steps:
-      - name: 下载构建产物
-        uses: actions/download-artifact@v3
-        
-      - name: 发布到GitHub Releases
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            ./artifact/*  # 匹配构建产物路径
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
