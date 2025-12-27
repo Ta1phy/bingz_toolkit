@@ -4,50 +4,50 @@ import sys
 import subprocess
 import platform
 
-# 安装依赖
+# Install dependencies
 def install_dependencies():
-    print("正在安装依赖...")
+    print("Installing dependencies...")
     subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
     subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller"])
 
-# 清理旧的打包文件
+# Clean old build files
 def clean_old_build():
-    print("正在清理旧的打包文件...")
+    print("Cleaning old build files...")
     for folder in ["build", "dist", "__pycache__"]:
         if os.path.exists(folder):
             subprocess.run(["rm", "-rf", folder])
 
-# macOS平台打包 - onefile模式
+# macOS platform packaging - onefile mode
 def build_macos():
-    print("开始打包macOS应用...")
+    print("Starting macOS application packaging...")
     
-    # 使用onefile模式打包，生成单个可执行文件
+    # Use onefile mode to generate a single executable file
     cmd = [
         "pyinstaller",
-        "--onefile",  # 使用onefile模式，生成单个可执行文件
+        "--onefile",  # Use onefile mode to generate a single executable file
         "--windowed",
         "--icon=icon/Bingz.png",
-        "--name=BingZ工具包",
-        "--strip",  # 剥离调试信息，减小体积
-        "--add-data=ai_tools.json:." ,
+        "--name=BingZ Toolkit",
+        "--strip",  # Strip debug symbols to reduce size
+        "--add-data=ai_tools.json:.",
         "--add-data=icon:icon",
-        "--noconfirm",  # 避免确认提示
-        # 只排除绝对不需要的模块，避免影响程序运行
+        "--noconfirm",  # Avoid confirmation prompts
+        # Only exclude absolutely unnecessary modules to avoid affecting program operation
         "--exclude-module=tkinter",
         "--exclude-module=unittest",
         "ai_tool_manager.py"
     ]
     
-    print(f"执行命令: {' '.join(cmd)}")
+    print(f"Executing command: {' '.join(cmd)}")
     subprocess.run(cmd)
     
-    print("macOS应用打包完成!")
-    print("可执行文件位置: dist/BingZ工具包")
-    print("\n优化说明：")
-    print("- 使用了--strip参数剥离调试信息")
-    print("- 深度排除了20多个不需要的模块")
-    print("- 图标设置为 icon/Bingz.png")
-    print("- 使用了onefile模式，生成单个可执行文件")
+    print("macOS application packaging completed!")
+    print("Executable location: dist/BingZ Toolkit")
+    print("\nOptimization notes:")
+    print("- Used --strip parameter to strip debug symbols")
+    print("- Excluded multiple unnecessary modules")
+    print("- Set icon to icon/Bingz.png")
+    print("- Used onefile mode to generate a single executable file")
 
 # Windows平台打包
 def build_windows():
