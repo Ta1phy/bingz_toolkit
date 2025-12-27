@@ -2,16 +2,43 @@ import sys
 import json
 import os
 import webbrowser
-import requests
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QPushButton, QLabel, QLineEdit, QTextEdit,
     QFileDialog, QMessageBox, QScrollArea, QFrame, QDialog,
-    QMenu, QProgressBar, QDialogButtonBox
+    QMenu
 )
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QBrush
 from PyQt5.QtSvg import QSvgWidget
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt
+
+##
+# 功能：BingZ工具包主窗口
+# 作者：BingZ
+# 日期：2023-12-15
+# 版本：1.1
+# 更新：2025-12-26
+# 新增功能：
+# 1. 新增搜索工具栏
+# 2. 新增工具文件夹
+# 3. 新增自定义图标
+#
+##
+
+# 获取用户数据目录
+def get_user_data_dir():
+    """获取用户数据目录，用于保存配置和数据文件"""
+    if os.name == 'nt':  # Windows
+        app_data = os.getenv('APPDATA')
+        return os.path.join(app_data, 'BingZ工具包')
+    elif os.name == 'posix':  # macOS或Linux
+        home = os.path.expanduser('~')
+        if sys.platform == 'darwin':  # macOS
+            return os.path.join(home, 'Library', 'Application Support', 'BingZ工具包')
+        else:  # Linux
+            return os.path.join(home, '.config', 'BingZ工具包')
+    # 默认返回当前目录
+    return os.path.abspath('.')
 
 # 处理PyInstaller打包后路径
 def resource_path(relative_path):
@@ -22,178 +49,36 @@ def resource_path(relative_path):
     # 开发环境
     return os.path.join(os.path.abspath('.'), relative_path)
 
-class UpdateChecker(QThread):
-    """更新检查线程"""
-    update_available = pyqtSignal(dict)
-    no_update = pyqtSignal()
-    error = pyqtSignal(str)
-    progress = pyqtSignal(int, str)  # 添加进度信号
-    
-    def __init__(self, current_version, update_url):
-        super().__init__()
-        self.current_version = current_version
-        self.update_url = update_url
-    
-    def run(self):
-        try:
-            # 发送请求获取最新版本信息
-            self.progress.emit(20, "正在连接更新服务器...")
-            response = requests.get(self.update_url, timeout=5)
-            self.progress.emit(50, "正在下载版本信息...")
-            response.raise_for_status()
-            self.progress.emit(70, "正在解析版本信息...")
-            update_info = response.json()
-            self.progress.emit(80, "正在比较版本...")
-            
-            # 比较版本号
-            if self.compare_version(update_info["version"], self.current_version):
-                self.progress.emit(100, "发现新版本!")
-                self.update_available.emit(update_info)
-            else:
-                self.progress.emit(100, "当前已是最新版本")
-                self.no_update.emit()
-        except requests.exceptions.RequestException as e:
-            self.progress.emit(100, f"检查更新失败: {str(e)}")
-            self.error.emit(f"检查更新失败: {str(e)}")
-    
-    def compare_version(self, new_version, old_version):
-        """比较版本号，新版本大于旧版本返回True"""
-        new_parts = list(map(int, new_version.split(".")))
-        old_parts = list(map(int, old_version.split(".")))
-        
-        # 确保版本号位数相同
-        max_length = max(len(new_parts), len(old_parts))
-        new_parts.extend([0] * (max_length - len(new_parts)))
-        old_parts.extend([0] * (max_length - len(old_parts)))
-        
-        for new, old in zip(new_parts, old_parts):
-            if new > old:
-                return True
-            elif new < old:
-                return False
-        return False
-
-class UpdateCheckDialog(QDialog):
-    """更新检查对话框"""
-    update_canceled = pyqtSignal()
-    update_checked = pyqtSignal()
-    
-    def __init__(self, parent=None, current_version="1.0.0", update_url="https://example.com/update_info.json"):
-        super().__init__(parent)
-        self.current_version = current_version
-        self.update_url = update_url
-        self.init_ui()
-        
-    def init_ui(self):
-        """初始化更新检查对话框"""
-        self.setWindowTitle("检查更新")
-        self.setFixedSize(300, 150)
-        self.setWindowModality(Qt.ApplicationModal)  # 模态对话框，阻止用户操作其他窗口
-        
-        # 主布局
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
-        
-        # 状态标签
-        self.status_label = QLabel("正在检查更新...")
-        self.status_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.status_label)
-        
-        # 进度条
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFormat("%p%")
-        layout.addWidget(self.progress_bar)
-        
-        # 按钮布局
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
-        
-        # 取消按钮
-        self.cancel_button = QPushButton("取消")
-        self.cancel_button.clicked.connect(self.on_cancel)
-        button_layout.addWidget(self.cancel_button)
-        
-        # 关闭按钮（初始隐藏）
-        self.close_button = QPushButton("关闭")
-        self.close_button.clicked.connect(self.accept)
-        self.close_button.hide()
-        button_layout.addWidget(self.close_button)
-        
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
-        
-        # 开始检查更新
-        self.start_check()
-    
-    def start_check(self):
-        """开始检查更新"""
-        # 创建更新检查线程
-        self.update_checker = UpdateChecker(self.current_version, self.update_url)
-        self.update_checker.update_available.connect(self.on_update_available)
-        self.update_checker.no_update.connect(self.on_no_update)
-        self.update_checker.error.connect(self.on_update_error)
-        self.update_checker.progress.connect(self.update_progress)
-        self.update_checker.finished.connect(self.on_check_finished)
-        self.update_checker.start()
-    
-    def update_progress(self, progress, status):
-        """更新进度条和状态"""
-        self.progress_bar.setValue(progress)
-        self.status_label.setText(status)
-    
-    def on_update_available(self, update_info):
-        """发现更新时的处理"""
-        self.update_info = update_info
-        self.status_label.setText(f"发现新版本 {update_info['version']}！")
-        # 显示更新按钮
-        self.cancel_button.setText("立即更新")
-        self.cancel_button.disconnect()
-        self.cancel_button.clicked.connect(self.on_update)
-        self.close_button.show()
-    
-    def on_no_update(self):
-        """没有更新时的处理"""
-        self.status_label.setText("当前已是最新版本")
-        self.cancel_button.hide()
-        self.close_button.show()
-    
-    def on_update_error(self, error_msg):
-        """更新检查错误时的处理"""
-        self.status_label.setText(error_msg)
-        self.cancel_button.hide()
-        self.close_button.show()
-    
-    def on_cancel(self):
-        """取消更新检查"""
-        self.update_checker.terminate()
-        self.update_canceled.emit()
-        self.reject()
-    
-    def on_update(self):
-        """立即更新"""
-        self.accept()
-        # 这里可以添加下载更新的逻辑
-        QMessageBox.information(self, "下载更新", f"开始下载新版本 {self.update_info['version']}...")
-    
-    def on_check_finished(self):
-        """检查完成时的处理"""
-        pass
-
 class AIToolManager(QMainWindow):
     def __init__(self):
         super().__init__()
         self.tools = []
-        self.data_file = resource_path("ai_tools.json")
-        # 版本信息
-        self.current_version = "1.0.0"
+        
+        # 创建用户数据目录
+        self.data_dir = get_user_data_dir()
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir)
+        
+        # 设置数据文件路径
+        self.data_file = os.path.join(self.data_dir, "ai_tools.json")
+        
+        # 如果数据文件不存在，从程序目录复制初始数据
+        initial_data_file = resource_path("ai_tools.json")
+        if not os.path.exists(self.data_file) and os.path.exists(initial_data_file):
+            import shutil
+            shutil.copy(initial_data_file, self.data_file)
+        
         self.init_ui()
         self.load_tools()
         
     def init_ui(self):
-        self.setWindowTitle("BingZ")
+        self.setWindowTitle("BingZv1.0")
+        
+        # 设置窗口图标
+        icon_path = resource_path("icon/Bingz.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+        
         self.setFixedSize(425, 500)  # 设置固定大小，不允许鼠标拖动修改
         
         # 主布局
@@ -210,6 +95,17 @@ class AIToolManager(QMainWindow):
         title_label = QLabel("BingZ工具包")
         title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: black; padding: 2px 8px; border-radius: 8px;")
         top_layout.addWidget(title_label)
+        
+        # 搜索框
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("搜索工具...")
+        self.search_input.setStyleSheet(
+            "font-size: 12px; padding: 6px 12px; "
+            "border: 1px solid #ddd; border-radius: 15px; "
+            "width: 150px;"
+        )
+        self.search_input.textChanged.connect(self.filter_tools)
+        top_layout.addWidget(self.search_input)
         
         # 添加工具按钮（圆角矩形样式）
         add_button = QPushButton("添加")
@@ -253,54 +149,7 @@ class AIToolManager(QMainWindow):
         
         self.setCentralWidget(central_widget)
     
-
     
-    def check_for_updates(self):
-        """检查更新"""
-        print(f"当前版本: {self.current_version}")
-        print("正在检查更新...")
-        
-        # 创建更新检查线程
-        self.update_checker = UpdateChecker(self.current_version, self.update_url)
-        self.update_checker.update_available.connect(self.show_update_dialog)
-        self.update_checker.no_update.connect(self.on_no_update)
-        self.update_checker.error.connect(self.on_update_error)
-        self.update_checker.start()
-    
-    def show_update_dialog(self, update_info):
-        """显示更新对话框"""
-        self.update_info = update_info
-        
-        dialog = QMessageBox(self)
-        dialog.setWindowTitle("发现新版本")
-        dialog.setText(f"发现新版本 {update_info['version']}！\n\n更新内容：\n{update_info['changelog']}")
-        dialog.setIcon(QMessageBox.Information)
-        
-        # 添加更新和取消按钮
-        dialog.setStandardButtons(QMessageBox.Update | QMessageBox.Cancel)
-        dialog.button(QMessageBox.Update).setText("立即更新")
-        dialog.button(QMessageBox.Cancel).setText("稍后再说")
-        
-        # 显示对话框
-        result = dialog.exec_()
-        if result == QMessageBox.Update:
-            self.download_update(update_info)
-    
-    def on_no_update(self):
-        """没有更新时的处理"""
-        print("当前已是最新版本")
-    
-    def on_update_error(self, error_msg):
-        """更新检查错误时的处理"""
-        print(error_msg)
-    
-    def download_update(self, update_info):
-        """下载更新"""
-        # 这里只是示例，实际需要实现下载逻辑
-        QMessageBox.information(self, "下载更新", f"开始下载新版本 {update_info['version']}...")
-        # 实际应用中，这里应该创建一个下载线程，显示下载进度
-        # 下载完成后提示用户安装
-        QMessageBox.information(self, "下载完成", "更新已下载完成，请手动安装")
     
     def load_tools(self):
         if os.path.exists(self.data_file):
@@ -312,7 +161,13 @@ class AIToolManager(QMainWindow):
         with open(self.data_file, 'w', encoding='utf-8') as f:
             json.dump(self.tools, f, ensure_ascii=False, indent=2)
     
-    def display_tools(self):
+    def display_tools(self, tools=None):
+        # 使用传入的工具列表，如果没有则使用所有工具
+        display_tools = tools if tools is not None else self.tools
+        
+        # 对工具进行排序，文件夹类型置顶
+        sorted_tools = sorted(display_tools, key=lambda x: (x.get('type', 'tool') != 'folder', x['name']))
+        
         # 清空现有工具
         for i in reversed(range(self.tools_layout.count())):
             widget = self.tools_layout.itemAt(i).widget()
@@ -322,12 +177,34 @@ class AIToolManager(QMainWindow):
         # 显示工具（网格排列，一行4个，紧凑布局）
         rows = 0
         cols = 4  # 4列布局，紧凑排列
-        for i, tool in enumerate(self.tools):
+        for i, tool in enumerate(sorted_tools):
             tool_widget = self.create_tool_widget(tool)
             row = i // cols
             col = i % cols
             self.tools_layout.addWidget(tool_widget, row, col)
             rows = row + 1
+    
+    def filter_tools(self):
+        """根据搜索文本过滤工具"""
+        search_text = self.search_input.text().lower().strip()
+        
+        if not search_text:
+            # 搜索文本为空，显示所有工具
+            self.display_tools()
+            return
+        
+        # 过滤工具，匹配名称、描述、功能等
+        filtered_tools = []
+        for tool in self.tools:
+            # 检查工具的各个字段是否包含搜索文本
+            if (search_text in tool["name"].lower() or
+                search_text in tool["description"].lower() or
+                search_text in tool["features"].lower() or
+                search_text in tool["url"].lower()):
+                filtered_tools.append(tool)
+        
+        # 显示过滤后的工具
+        self.display_tools(filtered_tools)
     
     def create_tool_widget(self, tool):
         widget = QWidget()
@@ -337,60 +214,118 @@ class AIToolManager(QMainWindow):
         layout.setSpacing(5)  # 内部间距
         layout.setAlignment(Qt.AlignCenter)  # 内部元素居中对齐
         
+        # 确定工具类型，默认为普通工具
+        tool_type = tool.get("type", "tool")
+        
         # 图标按钮（网格风格）
         icon_button = QPushButton()
         icon_button.setFixedSize(60, 60)  # 图标按钮大小
-        icon_button.setStyleSheet(
-            "QPushButton {border: none; background: transparent; border-radius: 12px;}"
-            "QPushButton:hover {background-color: rgba(0, 0, 0, 0.1);}"
-        )
-        icon_button.clicked.connect(lambda: self.show_tool_detail(tool))
+        
+        if tool_type == "folder":
+            # 文件夹类型样式
+            icon_button.setStyleSheet(
+                "QPushButton {border: 2px solid #2196F3; background-color: #E3F2FD; border-radius: 12px;}"
+                "QPushButton:hover {background-color: #BBDEFB;}"
+            )
+            # 文件夹点击事件
+            icon_button.clicked.connect(lambda: self.open_toolkit(tool))
+        else:
+            # 普通工具样式
+            icon_button.setStyleSheet(
+                "QPushButton {border: none; background: transparent; border-radius: 12px;}"
+                "QPushButton:hover {background-color: rgba(0, 0, 0, 0.1);}"
+            )
+            # 普通工具点击事件
+            icon_button.clicked.connect(lambda: self.show_tool_detail(tool))
         
         # 设置右键菜单
         icon_button.setContextMenuPolicy(Qt.CustomContextMenu)
         icon_button.customContextMenuRequested.connect(lambda pos, btn=icon_button, t=tool: self.show_context_menu(pos, btn, t))
         
-        icon_path = tool.get("icon_path", "")
+        # 绘制图标
+        icon_label = QLabel(icon_button)
+        icon_label.setGeometry(5, 5, 50, 50)
+        icon_label.setAlignment(Qt.AlignCenter)
         
-        # 处理相对路径
-        if icon_path.startswith("./"):
-            icon_path = resource_path(icon_path[2:])
-        
-        if icon_path and os.path.exists(icon_path):
-            # 检查文件扩展名，支持SVG和其他图片格式
-            file_ext = os.path.splitext(icon_path)[1].lower()
+        if tool_type == "folder":
+            # 文件夹图标
+            icon_path = tool.get("icon_path", "")
             
-            if file_ext == ".svg":
-                # SVG图标处理
-                svg_widget = QSvgWidget(icon_path, icon_button)
-                svg_widget.setGeometry(5, 5, 50, 50)
+            # 处理相对路径
+            if icon_path.startswith("./"):
+                icon_path = resource_path(icon_path[2:])
+            
+            if icon_path and os.path.exists(icon_path):
+                # 检查文件扩展名，支持SVG和其他图片格式
+                file_ext = os.path.splitext(icon_path)[1].lower()
+                
+                if file_ext == ".svg":
+                    # SVG图标处理
+                    svg_widget = QSvgWidget(icon_path, icon_button)
+                    svg_widget.setGeometry(5, 5, 50, 50)
+                    icon_label.hide()  # 隐藏文字标签
+                else:
+                    # 其他图片格式处理
+                    pixmap = QPixmap(icon_path)
+                    scaled_pixmap = pixmap.scaled(50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    
+                    # 创建圆角矩形遮罩
+                    rounded_pixmap = QPixmap(scaled_pixmap.size())
+                    rounded_pixmap.fill(Qt.transparent)
+                    painter = QPainter(rounded_pixmap)
+                    painter.setRenderHint(QPainter.Antialiasing)
+                    painter.setBrush(QBrush(scaled_pixmap))
+                    painter.setPen(Qt.NoPen)
+                    painter.drawRoundedRect(0, 0, scaled_pixmap.width(), scaled_pixmap.height(), 10, 10)
+                    painter.end()
+                    
+                    icon_label.setPixmap(rounded_pixmap)
             else:
-                # 其他图片格式处理
-                icon_label = QLabel(icon_button)
-                icon_label.setGeometry(5, 5, 50, 50)  # 图标尺寸
-                icon_label.setAlignment(Qt.AlignCenter)
-                
-                pixmap = QPixmap(icon_path)
-                scaled_pixmap = pixmap.scaled(50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                
-                # 创建圆角矩形遮罩
-                rounded_pixmap = QPixmap(scaled_pixmap.size())
-                rounded_pixmap.fill(Qt.transparent)
-                painter = QPainter(rounded_pixmap)
-                painter.setRenderHint(QPainter.Antialiasing)
-                painter.setBrush(QBrush(scaled_pixmap))
-                painter.setPen(Qt.NoPen)
-                painter.drawRoundedRect(0, 0, scaled_pixmap.width(), scaled_pixmap.height(), 10, 10)
-                painter.end()
-                
-                icon_label.setPixmap(rounded_pixmap)
+                # 默认文件夹图标
+                icon_label.setStyleSheet(
+                    "QLabel {"
+                    "    font-size: 32px; font-weight: bold; color: #2196F3;"
+                    "    background-color: transparent;"
+                    "}"
+                )
+                icon_label.setText("📁")
         else:
-            # 默认图标（使用文字，网格布局大小）
-            icon_label = QLabel(icon_button)
-            icon_label.setGeometry(5, 5, 50, 50)
-            icon_label.setAlignment(Qt.AlignCenter)
-            icon_label.setText(tool["name"][0])
-            icon_label.setStyleSheet("font-size: 20px; font-weight: bold; background-color: #4CAF50; color: white; border-radius: 10px; width: 50px; height: 50px;")
+            # 普通工具图标
+            icon_path = tool.get("icon_path", "")
+            
+            # 处理相对路径
+            if icon_path.startswith("./"):
+                icon_path = resource_path(icon_path[2:])
+            
+            if icon_path and os.path.exists(icon_path):
+                # 检查文件扩展名，支持SVG和其他图片格式
+                file_ext = os.path.splitext(icon_path)[1].lower()
+                
+                if file_ext == ".svg":
+                    # SVG图标处理
+                    svg_widget = QSvgWidget(icon_path, icon_button)
+                    svg_widget.setGeometry(5, 5, 50, 50)
+                    icon_label.hide()  # 隐藏文字标签
+                else:
+                    # 其他图片格式处理
+                    pixmap = QPixmap(icon_path)
+                    scaled_pixmap = pixmap.scaled(50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    
+                    # 创建圆角矩形遮罩
+                    rounded_pixmap = QPixmap(scaled_pixmap.size())
+                    rounded_pixmap.fill(Qt.transparent)
+                    painter = QPainter(rounded_pixmap)
+                    painter.setRenderHint(QPainter.Antialiasing)
+                    painter.setBrush(QBrush(scaled_pixmap))
+                    painter.setPen(Qt.NoPen)
+                    painter.drawRoundedRect(0, 0, scaled_pixmap.width(), scaled_pixmap.height(), 10, 10)
+                    painter.end()
+                    
+                    icon_label.setPixmap(rounded_pixmap)
+            else:
+                # 默认图标（使用文字，网格布局大小）
+                icon_label.setText(tool["name"][0])
+                icon_label.setStyleSheet("font-size: 20px; font-weight: bold; background-color: #4CAF50; color: white; border-radius: 10px; width: 50px; height: 50px;")
         
         layout.addWidget(icon_button)
         
@@ -405,9 +340,326 @@ class AIToolManager(QMainWindow):
         
         return widget
     
+    def open_toolkit(self, tool):
+        """打开嵌套工具包"""
+        # 创建新的工具包页面
+        toolkit_window = QDialog()
+        toolkit_window.setWindowTitle(f"{tool['name']}")
+        
+        # 设置窗口图标
+        icon_path = resource_path("icon/Bingz.png")
+        if os.path.exists(icon_path):
+            toolkit_window.setWindowIcon(QIcon(icon_path))
+        
+        toolkit_window.setFixedSize(425, 500)
+        toolkit_window.setStyleSheet("background-color: white;")
+        
+        layout = QVBoxLayout(toolkit_window)
+        layout.setContentsMargins(10, 10, 10, 10)
+        
+        # 顶部控制栏
+        top_layout = QHBoxLayout()
+        
+        # 返回按钮
+        back_button = QPushButton("返回")
+        back_button.setStyleSheet(
+            "QPushButton { "
+            "font-size: 12px; padding: 6px 12px; "
+            "background-color: #2196F3; color: white; "
+            "border: 2px solid black; border-radius: 15px; "
+            " } "
+            "QPushButton:hover { "
+            "background-color: #1976D2; "
+            "border: 2px solid black; "
+            " } "
+        )
+        back_button.clicked.connect(toolkit_window.close)
+        top_layout.addWidget(back_button)
+        
+        # 标题
+        title_label = QLabel(tool["name"])
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: black; padding: 2px 8px; border-radius: 8px;")
+        top_layout.addWidget(title_label)
+        
+        # 添加工具按钮
+        add_button = QPushButton("添加")
+        add_button.setStyleSheet(
+            "QPushButton { "
+            "font-size: 12px; padding: 6px 12px; "
+            "background-color: #4CAF50; color: white; "
+            "border: 2px solid black; border-radius: 15px; "
+            " } "
+            "QPushButton:hover { "
+            "background-color: #388E3C; "
+            "border: 2px solid black; "
+            " } "
+        )
+        top_layout.addWidget(add_button)
+        
+        # 搜索框
+        search_input = QLineEdit()
+        search_input.setPlaceholderText("搜索工具...")
+        search_input.setStyleSheet(
+            "font-size: 12px; padding: 6px 12px; "
+            "border: 1px solid #ddd; border-radius: 15px; "
+            "width: 150px;"
+        )
+        top_layout.addWidget(search_input)
+        
+        top_layout.addStretch()
+        
+        # 工具展示区域
+        tools_container = QWidget()
+        tools_container.setFixedSize(400, 400)
+        tools_layout = QGridLayout(tools_container)
+        tools_layout.setSpacing(20)
+        tools_layout.setContentsMargins(10, 10, 10, 10)
+        tools_layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        
+        # 设置每列宽度相等
+        for col in range(4):
+            tools_layout.setColumnStretch(col, 1)
+        
+        # 滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(False)
+        scroll_area.setWidget(tools_container)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
+        # 获取嵌套工具
+        nested_tools = tool.get("children", [])
+        
+        # 显示嵌套工具（初始排序）
+        def show_tools(tools_list):
+            # 对工具进行排序，文件夹类型置顶
+            sorted_tools = sorted(tools_list, key=lambda x: (x.get('type', 'tool') != 'folder', x['name']))
+            
+            # 清空现有工具
+            for j in reversed(range(tools_layout.count())):
+                widget = tools_layout.itemAt(j).widget()
+                if widget is not None:
+                    widget.deleteLater()
+            
+            # 显示过滤后的工具
+            for j, nested_tool in enumerate(sorted_tools):
+                tool_widget = self.create_tool_widget(nested_tool)
+                row = j // cols
+                col = j % cols
+                tools_layout.addWidget(tool_widget, row, col)
+        
+        # 初始显示嵌套工具
+        show_tools(nested_tools)
+        
+        # 定义搜索过滤函数
+        def filter_nested_tools():
+            search_text = search_input.text().lower().strip()
+            
+            if not search_text:
+                display_tools = nested_tools
+            else:
+                display_tools = []
+                for nested_tool in nested_tools:
+                    if (search_text in nested_tool["name"].lower() or
+                        search_text in nested_tool.get("description", "").lower() or
+                        search_text in nested_tool.get("features", "").lower() or
+                        search_text in nested_tool.get("url", "").lower()):
+                        display_tools.append(nested_tool)
+            
+            # 显示过滤后的工具（排序后）
+            show_tools(display_tools)
+        
+        # 连接搜索信号
+        search_input.textChanged.connect(filter_nested_tools)
+        
+        # 定义添加工具到文件夹的函数
+        def add_tool_to_folder():
+            # 创建添加工具对话框
+            add_dialog = QDialog(toolkit_window)
+            add_dialog.setWindowTitle(f"添加工具到 {tool['name']}")
+            
+            # 设置窗口图标
+            icon_path = resource_path("icon/Bingz.png")
+            if os.path.exists(icon_path):
+                add_dialog.setWindowIcon(QIcon(icon_path))
+            
+            add_dialog.setGeometry(300, 300, 400, 450)
+            add_layout = QVBoxLayout(add_dialog)
+            
+            # 工具类型选择
+            add_layout.addWidget(QLabel("工具类型:"))
+            type_layout = QHBoxLayout()
+            
+            # 普通工具单选按钮
+            import PyQt5.QtWidgets as QtWidgets
+            tool_type = QtWidgets.QButtonGroup()
+            tool_radio = QtWidgets.QRadioButton("普通工具")
+            folder_radio = QtWidgets.QRadioButton("文件夹")
+            tool_radio.setChecked(True)  # 默认选择普通工具
+            
+            tool_type.addButton(tool_radio)
+            tool_type.addButton(folder_radio)
+            
+            type_layout.addWidget(tool_radio)
+            type_layout.addWidget(folder_radio)
+            add_layout.addLayout(type_layout)
+            
+            # 名称
+            add_layout.addWidget(QLabel("工具名称:"))
+            name_input = QLineEdit()
+            name_input.setStyleSheet(
+                "border: 1px solid #ddd; border-radius: 15px; padding: 4px 8px;"
+            )
+            add_layout.addWidget(name_input)
+            
+            # 简介
+            add_layout.addWidget(QLabel("简介:"))
+            desc_input = QLineEdit()
+            desc_input.setStyleSheet(
+                "border: 1px solid #ddd; border-radius: 15px; padding: 4px 8px;"
+            )
+            add_layout.addWidget(desc_input)
+            
+            # 主要功能
+            add_layout.addWidget(QLabel("主要功能:"))
+            features_input = QTextEdit()
+            features_input.setStyleSheet(
+                "border: 1px solid #ddd; border-radius: 15px; padding: 4px 8px;"
+            )
+            add_layout.addWidget(features_input)
+            
+            # 网站URL
+            url_label = QLabel("网站URL:")
+            add_layout.addWidget(url_label)
+            url_input = QLineEdit()
+            url_input.setStyleSheet(
+                "border: 1px solid #ddd; border-radius: 15px; padding: 4px 8px;"
+            )
+            add_layout.addWidget(url_input)
+            
+            # 图标路径
+            icon_label = QLabel("图标路径:")
+            add_layout.addWidget(icon_label)
+            icon_layout = QHBoxLayout()
+            icon_input = QLineEdit()
+            icon_input.setStyleSheet(
+                "border: 1px solid #ddd; border-radius: 15px; padding: 4px 8px;"
+            )
+            icon_layout.addWidget(icon_input)
+            
+            def browse_icon():
+                file_path, _ = QFileDialog.getOpenFileName(
+                    self, "选择图标", "", "Image Files (*.png *.jpg *.jpeg *.ico *.svg)"
+                )
+                if file_path:
+                    icon_input.setText(file_path)
+            
+            browse_button = QPushButton("浏览")
+            browse_button.setStyleSheet(
+                "font-size: 12px; padding: 4px 8px; "
+                "background-color: #9E9E9E; color: white; "
+                "border: none; border-radius: 15px;"
+            )
+            browse_button.clicked.connect(browse_icon)
+            icon_layout.addWidget(browse_button)
+            add_layout.addLayout(icon_layout)
+            
+            # 保存按钮
+            save_button = QPushButton("保存")
+            save_button.setStyleSheet(
+                "font-size: 14px; padding: 8px 16px; "
+                "background-color: #4CAF50; color: white; "
+                "border: none; border-radius: 15px;"
+            )
+            
+            def save_new_tool():
+                name = name_input.text().strip()
+                desc = desc_input.text().strip()
+                features = features_input.toPlainText().strip()
+                is_tool = tool_radio.isChecked()
+                
+                if is_tool:
+                    # 普通工具验证
+                    url = url_input.text().strip()
+                    icon_path = icon_input.text().strip()
+                    
+                    if not name or not url:
+                        QMessageBox.warning(self, "错误", "名称和URL不能为空")
+                        return
+                    
+                    new_tool = {
+                        "type": "tool",
+                        "name": name,
+                        "description": desc,
+                        "features": features,
+                        "url": url,
+                        "icon_path": icon_path
+                    }
+                else:
+                    # 文件夹类型
+                    if not name:
+                        QMessageBox.warning(self, "错误", "名称不能为空")
+                        return
+                    
+                    new_tool = {
+                        "type": "folder",
+                        "name": name,
+                        "description": desc,
+                        "features": features,
+                        "children": []
+                    }
+                
+                # 添加到文件夹的children列表
+                if "children" not in tool:
+                    tool["children"] = []
+                tool["children"].append(new_tool)
+                
+                # 保存到数据文件
+                self.save_tools()
+                
+                # 更新嵌套工具列表
+                nested_tools.append(new_tool)
+                
+                # 刷新显示
+                filter_nested_tools()
+                
+                add_dialog.close()
+                QMessageBox.information(self, "成功", f"工具已添加到 {tool['name']}")
+            
+            save_button.clicked.connect(save_new_tool)
+            add_layout.addWidget(save_button)
+            
+            # 根据选择的类型显示/隐藏某些字段
+            def update_fields():
+                is_tool = tool_radio.isChecked()
+                url_label.setVisible(is_tool)
+                url_input.setVisible(is_tool)
+                icon_label.setVisible(is_tool)
+                icon_input.setVisible(is_tool)
+                browse_button.setVisible(is_tool)
+            
+            tool_radio.toggled.connect(update_fields)
+            folder_radio.toggled.connect(update_fields)
+            
+            add_dialog.exec_()
+        
+        # 连接添加按钮信号
+        add_button.clicked.connect(add_tool_to_folder)
+        
+        layout.addLayout(top_layout)
+        layout.addWidget(scroll_area)
+        
+        toolkit_window.exec_()
+    
     def show_tool_detail(self, tool):
         detail_window = QDialog()
         detail_window.setWindowTitle(f"{tool['name']} - 详情")
+        
+        # 设置窗口图标
+        icon_path = resource_path("icon/Bingz.png")
+        if os.path.exists(icon_path):
+            detail_window.setWindowIcon(QIcon(icon_path))
+        
         detail_window.setFixedSize(375, 350)  # 设置固定大小，缩小一倍，不允许鼠标拖动修改
         detail_window.setStyleSheet("background-color: white;")  # 设置背景颜色为白色
         layout = QVBoxLayout(detail_window)
@@ -516,13 +768,20 @@ class AIToolManager(QMainWindow):
         """显示右键菜单"""
         menu = QMenu(self)
         
+        # 确定工具类型
+        tool_type = tool.get("type", "tool")
+        
+        # 修改内容选项
+        edit_action = menu.addAction("修改内容")
+        edit_action.triggered.connect(lambda: self.edit_tool_dialog(tool))
+        
+        # 更改图标选项（所有类型都支持）
+        change_icon_action = menu.addAction("更改图标")
+        change_icon_action.triggered.connect(lambda: self.change_tool_icon(tool))
+        
         # 删除选项
         delete_action = menu.addAction("删除")
         delete_action.triggered.connect(lambda: self.delete_tool(tool))
-        
-        # 更改图标选项
-        change_icon_action = menu.addAction("更改图标")
-        change_icon_action.triggered.connect(lambda: self.change_tool_icon(tool))
         
         # 在鼠标位置显示菜单
         menu.exec_(widget.mapToGlobal(pos))
@@ -552,8 +811,32 @@ class AIToolManager(QMainWindow):
     def add_tool_dialog(self):
         dialog = QDialog()
         dialog.setWindowTitle("添加AI工具")
-        dialog.setGeometry(300, 300, 400, 400)
+        
+        # 设置窗口图标
+        icon_path = resource_path("icon/Bingz.png")
+        if os.path.exists(icon_path):
+            dialog.setWindowIcon(QIcon(icon_path))
+        
+        dialog.setGeometry(300, 300, 400, 450)
         layout = QVBoxLayout(dialog)
+        
+        # 工具类型选择
+        layout.addWidget(QLabel("工具类型:"))
+        type_layout = QHBoxLayout()
+        
+        # 普通工具单选按钮
+        import PyQt5.QtWidgets as QtWidgets
+        tool_type = QtWidgets.QButtonGroup()
+        tool_radio = QtWidgets.QRadioButton("普通工具")
+        folder_radio = QtWidgets.QRadioButton("文件夹")
+        tool_radio.setChecked(True)  # 默认选择普通工具
+        
+        tool_type.addButton(tool_radio)
+        tool_type.addButton(folder_radio)
+        
+        type_layout.addWidget(tool_radio)
+        type_layout.addWidget(folder_radio)
+        layout.addLayout(type_layout)
         
         # 名称
         layout.addWidget(QLabel("工具名称:"))
@@ -580,7 +863,8 @@ class AIToolManager(QMainWindow):
         layout.addWidget(features_input)
         
         # 网站URL
-        layout.addWidget(QLabel("网站URL:"))
+        url_label = QLabel("网站URL:")
+        layout.addWidget(url_label)
         url_input = QLineEdit()
         url_input.setStyleSheet(
             "border: 1px solid #ddd; border-radius: 15px; padding: 4px 8px;"
@@ -588,9 +872,183 @@ class AIToolManager(QMainWindow):
         layout.addWidget(url_input)
         
         # 图标路径
-        layout.addWidget(QLabel("图标路径:"))
+        icon_label = QLabel("图标路径:")
+        layout.addWidget(icon_label)
         icon_layout = QHBoxLayout()
         icon_input = QLineEdit()
+        icon_input.setStyleSheet(
+            "border: 1px solid #ddd; border-radius: 15px; padding: 4px 8px;"
+        )
+        icon_layout.addWidget(icon_input)
+        
+        def browse_icon():
+            file_path, _ = QFileDialog.getOpenFileName(
+                self, "选择图标", "", "Image Files (*.png *.jpg *.jpeg *.ico *.svg)"
+            )
+            if file_path:
+                icon_input.setText(file_path)
+        
+        browse_button = QPushButton("浏览")
+        browse_button.setStyleSheet(
+            "font-size: 12px; padding: 4px 8px; "
+            "background-color: #9E9E9E; color: white; "
+            "border: none; border-radius: 15px;"
+        )
+        browse_button.clicked.connect(browse_icon)
+        icon_layout.addWidget(browse_button)
+        layout.addLayout(icon_layout)
+        
+        # 保存按钮（圆角矩形样式）
+        save_button = QPushButton("保存")
+        save_button.setStyleSheet(
+            "font-size: 14px; padding: 8px 16px; "
+            "background-color: #4CAF50; color: white; "
+            "border: none; border-radius: 15px;"
+        )
+        save_button.clicked.connect(lambda: self.save_new_tool(
+            dialog, name_input, desc_input, features_input, url_input, icon_input, tool_radio.isChecked()
+        ))
+        layout.addWidget(save_button)
+        
+        # 根据选择的类型显示/隐藏某些字段
+        def update_fields():
+            is_tool = tool_radio.isChecked()
+            url_label.setVisible(is_tool)
+            url_input.setVisible(is_tool)
+            icon_label.setVisible(is_tool)
+            icon_input.setVisible(is_tool)
+            browse_button.setVisible(is_tool)
+        
+        tool_radio.toggled.connect(update_fields)
+        folder_radio.toggled.connect(update_fields)
+        
+        dialog.exec_()
+    
+    def save_new_tool(self, dialog, name_input, desc_input, features_input, url_input, icon_input, is_tool):
+        """保存新工具"""
+        name = name_input.text().strip()
+        desc = desc_input.text().strip()
+        features = features_input.toPlainText().strip()
+        
+        if is_tool:
+            # 普通工具验证
+            url = url_input.text().strip()
+            icon_path = icon_input.text().strip()
+            
+            if not name or not url:
+                QMessageBox.warning(self, "错误", "名称和URL不能为空")
+                return
+            
+            new_tool = {
+                "type": "tool",
+                "name": name,
+                "description": desc,
+                "features": features,
+                "url": url,
+                "icon_path": icon_path
+            }
+        else:
+            # 文件夹类型验证
+            if not name:
+                QMessageBox.warning(self, "错误", "名称不能为空")
+                return
+            
+            new_tool = {
+                "type": "folder",
+                "name": name,
+                "description": desc,
+                "features": features,
+                "children": []
+            }
+        
+        # 添加到工具列表
+        self.tools.append(new_tool)
+        self.save_tools()
+        self.display_tools()
+        
+        dialog.close()
+        QMessageBox.information(self, "成功", f"{name}已成功添加")
+    
+    def edit_tool_dialog(self, tool):
+        """修改工具内容的对话框"""
+        dialog = QDialog()
+        dialog.setWindowTitle("修改AI工具")
+        
+        # 设置窗口图标
+        icon_path = resource_path("icon/Bingz.png")
+        if os.path.exists(icon_path):
+            dialog.setWindowIcon(QIcon(icon_path))
+        
+        dialog.setGeometry(300, 300, 400, 450)
+        layout = QVBoxLayout(dialog)
+        
+        # 工具类型选择
+        layout.addWidget(QLabel("工具类型:"))
+        type_layout = QHBoxLayout()
+        
+        # 普通工具单选按钮
+        import PyQt5.QtWidgets as QtWidgets
+        tool_type = QtWidgets.QButtonGroup()
+        tool_radio = QtWidgets.QRadioButton("普通工具")
+        folder_radio = QtWidgets.QRadioButton("文件夹")
+        
+        # 根据当前工具类型设置默认选择
+        current_type = tool.get("type", "tool")
+        if current_type == "folder":
+            folder_radio.setChecked(True)
+        else:
+            tool_radio.setChecked(True)
+        
+        tool_type.addButton(tool_radio)
+        tool_type.addButton(folder_radio)
+        
+        type_layout.addWidget(tool_radio)
+        type_layout.addWidget(folder_radio)
+        layout.addLayout(type_layout)
+        
+        # 名称
+        layout.addWidget(QLabel("工具名称:"))
+        name_input = QLineEdit()
+        name_input.setText(tool["name"])
+        name_input.setStyleSheet(
+            "border: 1px solid #ddd; border-radius: 15px; padding: 4px 8px;"
+        )
+        layout.addWidget(name_input)
+        
+        # 简介
+        layout.addWidget(QLabel("简介:"))
+        desc_input = QLineEdit()
+        desc_input.setText(tool["description"])
+        desc_input.setStyleSheet(
+            "border: 1px solid #ddd; border-radius: 15px; padding: 4px 8px;"
+        )
+        layout.addWidget(desc_input)
+        
+        # 主要功能
+        layout.addWidget(QLabel("主要功能:"))
+        features_input = QTextEdit()
+        features_input.setPlainText(tool["features"])
+        features_input.setStyleSheet(
+            "border: 1px solid #ddd; border-radius: 15px; padding: 4px 8px;"
+        )
+        layout.addWidget(features_input)
+        
+        # 网站URL
+        url_label = QLabel("网站URL:")
+        layout.addWidget(url_label)
+        url_input = QLineEdit()
+        url_input.setText(tool.get("url", ""))
+        url_input.setStyleSheet(
+            "border: 1px solid #ddd; border-radius: 15px; padding: 4px 8px;"
+        )
+        layout.addWidget(url_input)
+        
+        # 图标路径
+        icon_label = QLabel("图标路径:")
+        layout.addWidget(icon_label)
+        icon_layout = QHBoxLayout()
+        icon_input = QLineEdit()
+        icon_input.setText(tool.get("icon_path", ""))
         icon_input.setStyleSheet(
             "border: 1px solid #ddd; border-radius: 15px; padding: 4px 8px;"
         )
@@ -612,49 +1070,92 @@ class AIToolManager(QMainWindow):
             "background-color: #4CAF50; color: white; "
             "border: none; border-radius: 15px;"
         )
-        save_button.clicked.connect(lambda: self.save_new_tool(
-            dialog, name_input, desc_input, features_input, url_input, icon_input
+        save_button.clicked.connect(lambda: self.save_edited_tool(
+            dialog, tool, name_input, desc_input, features_input, url_input, icon_input, tool_radio.isChecked()
         ))
         layout.addWidget(save_button)
         
+        # 根据选择的类型显示/隐藏某些字段
+        def update_fields():
+            is_tool = tool_radio.isChecked()
+            url_label.setVisible(is_tool)
+            url_input.setVisible(is_tool)
+            icon_label.setVisible(is_tool)
+            icon_input.setVisible(is_tool)
+            browse_button.setVisible(is_tool)
+        
+        tool_radio.toggled.connect(update_fields)
+        folder_radio.toggled.connect(update_fields)
+        
+        # 初始更新字段显示
+        update_fields()
+        
         dialog.exec_()
     
-    def browse_icon(self, line_edit):
+    def browse_icon(self, icon_input):
+        """浏览图标文件"""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "选择图标", "", "Image Files (*.png *.jpg *.jpeg *.ico *.svg)"
         )
         if file_path:
-            line_edit.setText(file_path)
+            icon_input.setText(file_path)
     
-    def save_new_tool(self, dialog, name_input, desc_input, features_input, url_input, icon_input):
+    def save_edited_tool(self, dialog, tool, name_input, desc_input, features_input, url_input, icon_input, is_tool):
+        """保存修改后的工具"""
         name = name_input.text().strip()
         desc = desc_input.text().strip()
         features = features_input.toPlainText().strip()
-        url = url_input.text().strip()
-        icon_path = icon_input.text().strip()
         
-        if not name or not url:
-            QMessageBox.warning(self, "错误", "名称和URL不能为空")
-            return
+        if is_tool:
+            # 普通工具验证
+            url = url_input.text().strip()
+            icon_path = icon_input.text().strip()
+            
+            if not name or not url:
+                QMessageBox.warning(self, "错误", "名称和URL不能为空")
+                return
+            
+            # 更新普通工具信息
+            tool["type"] = "tool"
+            tool["name"] = name
+            tool["description"] = desc
+            tool["features"] = features
+            tool["url"] = url
+            tool["icon_path"] = icon_path
+            
+            # 如果之前是文件夹，删除children字段
+            if "children" in tool:
+                del tool["children"]
+        else:
+            # 文件夹类型验证
+            if not name:
+                QMessageBox.warning(self, "错误", "名称不能为空")
+                return
+            
+            # 更新文件夹信息
+            tool["type"] = "folder"
+            tool["name"] = name
+            tool["description"] = desc
+            tool["features"] = features
+            
+            # 如果之前是普通工具，删除不需要的字段
+            if "url" in tool:
+                del tool["url"]
+            if "icon_path" in tool:
+                del tool["icon_path"]
+            
+            # 确保children字段存在
+            if "children" not in tool:
+                tool["children"] = []
         
-        new_tool = {
-            "name": name,
-            "description": desc,
-            "features": features,
-            "url": url,
-            "icon_path": icon_path
-        }
-        
-        self.tools.append(new_tool)
         self.save_tools()
         self.display_tools()
+        
         dialog.close()
-        QMessageBox.information(self, "成功", "AI工具添加成功")
+        QMessageBox.information(self, "成功", f"{name}已成功修改")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
-    # 直接启动主程序，不进行更新检查
     window = AIToolManager()
     window.show()
     sys.exit(app.exec_())
