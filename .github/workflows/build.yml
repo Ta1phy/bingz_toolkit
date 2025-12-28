@@ -53,15 +53,39 @@ jobs:
       - name: 运行打包脚本
         run: python build.py
 
-      # 步骤5：上传产物到Artifact（临时存储，开发调试用）
+      # 步骤5：添加详细调试信息，检查目录结构
+      - name: 检查当前目录结构（所有平台）
+        run: |
+          echo "当前工作目录: ${{ github.workspace }}"
+          ls -la
+        shell: bash
+
+      - name: 检查dist目录内容（所有平台）
+        run: |
+          if [ -d "dist" ]; then
+            echo "dist目录存在，内容："
+            ls -la dist/
+          else
+            echo "ERROR: dist目录不存在！"
+            # 检查是否有其他可能的输出目录
+            echo "当前目录下的所有目录："
+            find . -type d -name "*dist*" -o -name "*build*"
+          fi
+        shell: bash
+
+      # 步骤6：上传产物到Artifact（临时存储，开发调试用）
       - name: 上传临时产物（Artifact）
         uses: actions/upload-artifact@v4
         with:
           name: BingZ${{ matrix.os }}  # 产物名称区分平台
-          path: dist/  # 待上传的产物目录（与build.py输出目录对应）
+          path: |  # 尝试匹配所有可能的输出路径
+            dist/
+            ./dist/
+            **/dist/*
           retention-days: 30  # 产物保留30天（默认90天，可按需调整）
+          if-no-files-found: warn  # 如果没有找到文件，只警告，不失败
 
-      # 步骤6：上传产物到最新Release Assets（push和release事件都触发）
+      # 步骤7：上传产物到最新Release Assets（push和release事件都触发）
       - name: 获取最新Release标签
         id: get_latest_release
         uses: actions/github-script@v7
@@ -78,16 +102,14 @@ jobs:
               core.setOutput('tag_name', 'v1.0.0'); // 如果没有Release，使用默认标签
             }
 
-      - name: 列出实际生成的文件（关键调试步骤）
-        run: ls -la dist/  # 在Git Bash中，ls命令是可用的，支持-l和-a参数
-        shell: bash
-
       - name: 上传产物到最新Release Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_latest_release.outputs.tag_name }}  # 使用最新Release标签
-          files: |  # 修正路径：产物实际在dist目录下
+          files: |  # 匹配所有可能的输出路径
             dist/*
+            ./dist/*
+            **/dist/*
           overwrite_files: false  # 关键：不覆盖现有资产，相当于append=true的效果
           fail_on_unmatched_files: false  # 关键：避免因文件匹配失败而导致步骤失败
         env:
