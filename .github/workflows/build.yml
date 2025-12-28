@@ -53,9 +53,37 @@ jobs:
       - name: 运行打包脚本（Windows）
         if: matrix.os == 'windows-latest'
         run: |
+          echo "开始执行build.py..."
+          echo "当前工作目录: %CD%"
+          echo "Python版本:"
+          python --version
+          echo "Python路径: %PYTHON%"
+          echo ""
+          
+          rem 运行build.py并保存输出
           python build.py > build_output.txt 2>&1
-          echo "build.py执行完成，输出已保存到build_output.txt"
+          set BUILD_EXIT_CODE=%ERRORLEVEL%
+          
+          echo ""
+          echo "build.py执行完成，退出码: %BUILD_EXIT_CODE%"
+          echo "build.py输出："
           type build_output.txt
+          echo ""
+          
+          rem 检查dist目录是否存在
+          echo "检查dist目录："
+          if exist "dist" (
+            echo "✅ dist目录存在！"
+            echo "dist目录内容："
+            dir /s /b dist\*
+          ) else (
+            echo "❌ dist目录不存在！"
+            echo "当前目录内容："
+            dir /b
+            echo ""
+            echo "检查是否有其他输出目录："
+            dir /b /ad
+          )
         shell: cmd
 
       - name: 运行打包脚本（macOS）
@@ -115,10 +143,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BingZwindows-latest
-          path: |
-            dist\*
-            .\dist\*
-            **\dist\*
+          path: "dist/"  # 使用相对路径，GitHub Actions会自动处理跨平台转换
           retention-days: 30
           if-no-files-found: warn
 
@@ -156,10 +181,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_latest_release.outputs.tag_name }}
-          files: |
-            dist\*
-            .\dist\*
-            **\dist\*
+          files: "dist/"  # 使用相对路径，GitHub Actions会自动处理跨平台转换
           overwrite_files: false
           fail_on_unmatched_files: false
         env:
