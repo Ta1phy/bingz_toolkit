@@ -68,6 +68,7 @@ jobs:
       - name: 检查当前目录结构（所有平台）
         if: matrix.os == 'windows-latest'
         run: |
+          python build.py
           echo "当前工作目录: ${{ github.workspace }}"
           dir
         shell: cmd
