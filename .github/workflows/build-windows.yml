@@ -1,4 +1,4 @@
-name: Windows平台打包
+name: 跨平台打包
 
 # 添加权限设置
 permissions:
@@ -12,91 +12,57 @@ on:
     types: [ published ]  # 仅正式发布Release时触发（正式交付用）
 
 jobs:
-  build-windows:
-    # 运行环境：Windows最新版
-    runs-on: windows-latest
-    
-    # 指定Python版本
+  build:
+    # 构建矩阵：多平台+指定Python版本，并行构建
     strategy:
+      fail-fast: false  # 一个平台构建失败，不影响其他平台继续运行（便于排错）
       matrix:
-        python-version: [ '3.13' ]  # 匹配项目的Python版本
+        os: [ windows-latest, macos-latest ]  # 打包平台：Windows最新版、macOS最新版
+        python-version: [ '3.13' ]  # 匹配项目的Python版本（可按需修改为3.10、3.12等）
+
+    # 运行环境：对应矩阵中的操作系统
+    runs-on: ${{ matrix.os }}
 
     steps:
       # 步骤1：检出仓库代码到GitHub Actions构建环境
       - name: 检出代码
-        uses: actions/checkout@v4
-
-      # 步骤2：设置Windows终端编码为UTF-8
-      - name: 设置Windows终端编码
+        uses: actions/checkout@v4  # 官方检出动作，稳定可靠
+        
+      - name: 设置 Windows 终端编码为 UTF-8
+        if: matrix.os == 'windows-latest'  # 仅对 Windows 环境生效
         run: |
-          chcp 65001  # 切换终端编码为UTF-8
-          set PYTHONIOENCODING=utf-8  # 设置Python环境变量
+          chcp 65001  # Windows 命令：切换终端编码为 UTF-8（65001 对应 UTF-8）
+          set PYTHONIOENCODING=utf-8  # 设置 Python 环境变量，强制使用 UTF-8 编码
         shell: cmd
-
-      # 步骤3：设置指定版本的Python环境，开启pip缓存
+        
+      # 步骤2：设置指定版本的Python环境，开启pip缓存（优化构建时间）
       - name: 设置Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'  # 缓存pip依赖
+          cache: 'pip'  # 缓存pip依赖，后续构建无需重新下载
 
-      # 步骤4：升级pip并安装项目依赖+PyInstaller
+      # 步骤3：升级pip并安装项目依赖+PyInstaller
       - name: 安装依赖
         run: |
-          echo "升级pip..."
           python -m pip install --upgrade pip
-          echo "安装项目依赖..."
           pip install -r requirements.txt
-          echo "安装PyInstaller..."
           pip install pyinstaller
-        shell: cmd
 
-      # 步骤5：运行build.py打包脚本，生成产物到dist/目录
+      # 步骤4：运行build.py打包脚本，生成产物到dist/目录
       - name: 运行打包脚本
-        run: |
-          echo "开始执行build.py..."
-          echo "当前工作目录: %CD%"
-          echo "Python版本:"
-          python --version
-          echo "Python路径: %PYTHON%"
-          
-          rem 运行build.py并保存输出
-          python build.py > build_output.txt 2>&1
-          set BUILD_EXIT_CODE=%ERRORLEVEL%
-          
-          echo ""
-          echo "build.py执行完成，退出码: %BUILD_EXIT_CODE%"
-          echo "build.py输出："
-          type build_output.txt
-          echo ""
-          
-          rem 检查dist目录是否存在
-          echo "检查dist目录："
-          if exist "dist" (
-            echo "✅ dist目录存在！"
-            echo "dist目录内容："
-            dir /s /b dist\*
-          ) else (
-            echo "❌ dist目录不存在！"
-            echo "当前目录内容："
-            dir /b
-            echo "检查是否有其他输出目录："
-            dir /b /ad
-          )
-        shell: cmd
+        run: python build.py
 
-      # 步骤6：上传产物到Artifact（临时存储，开发调试用）
+      # 步骤5：上传产物到Artifact（临时存储，开发调试用）
       - name: 上传临时产物（Artifact）
         uses: actions/upload-artifact@v4
         with:
-          name: BingZ-windows
-          path: "dist/"  # 使用相对路径，GitHub Actions会自动处理
-          retention-days: 30  # 产物保留30天
-          if-no-files-found: warn  # 如果没有找到文件，只警告，不失败
+          name: BingZ${{ matrix.os }}  # 产物名称区分平台
+          path: dist/  # 待上传的产物目录（与build.py输出目录对应）
+          retention-days: 30  # 产物保留30天（默认90天，可按需调整）
 
-      # 步骤7：上传产物到最新Release Assets（仅在Release事件时触发）
+      # 步骤6：上传产物到最新Release Assets（push和release事件都触发）
       - name: 获取最新Release标签
-        if: github.event_name == 'release'
         id: get_latest_release
         uses: actions/github-script@v7
         with:
@@ -109,16 +75,20 @@ jobs:
             if (releases.data.length > 0) {
               core.setOutput('tag_name', releases.data[0].tag_name);
             } else {
-              core.setOutput('tag_name', 'v1.0.0');
+              core.setOutput('tag_name', 'v1.0.0'); // 如果没有Release，使用默认标签
             }
 
-      - name: 上传产物到Release Assets
-        if: github.event_name == 'release'
+      - name: 列出实际生成的文件（关键调试步骤）
+        run: ls -la dist/  # 在Git Bash中，ls命令是可用的，支持-l和-a参数
+        shell: bash
+
+      - name: 上传产物到最新Release Assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.get_latest_release.outputs.tag_name }}
-          files: "dist/"  # 使用相对路径，GitHub Actions会自动处理
-          overwrite_files: false  # 不覆盖现有资产
-          fail_on_unmatched_files: false  # 避免因文件匹配失败而导致步骤失败
+          tag_name: ${{ steps.get_latest_release.outputs.tag_name }}  # 使用最新Release标签
+          files: |  # 修正路径：产物实际在dist目录下
+            dist/*
+          overwrite_files: true  
+          fail_on_unmatched_files: false  # 关键：避免因文件匹配失败而导致步骤失败
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成的Token
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成，
