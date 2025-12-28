@@ -3,6 +3,23 @@ import os
 import sys
 import subprocess
 import platform
+import shutil
+import re
+
+# 获取当前版本号
+def get_current_version():
+    """从ai_tool_manager.py中读取当前版本号"""
+    try:
+        with open("ai_tool_manager.py", "r", encoding="utf-8") as f:
+            content = f.read()
+        # 匹配current_version = "x.x.x"格式
+        match = re.search(r'current_version\s*=\s*"([\d.]+)"', content)
+        if match:
+            return match.group(1)
+        return "1.0"  # 默认版本号
+    except Exception as e:
+        print(f"获取版本号失败: {e}")
+        return "1.0"
 
 # Install dependencies
 def install_dependencies():
@@ -13,20 +30,24 @@ def install_dependencies():
 # Clean old build files
 def clean_old_build():
     print("Cleaning old build files...")
+    
     for folder in ["build", "dist", "__pycache__"]:
         if os.path.exists(folder):
-            subprocess.run(["rm", "-rf", folder])
+            shutil.rmtree(folder)
 
 # macOS platform packaging - onefile mode
 def build_macos():
     print("Starting macOS application packaging...")
+    
+    # 获取当前版本号
+    version = get_current_version()
     
     # Use onefile mode to generate a single executable file
     cmd = [
         "pyinstaller",
         "--onefile",  # Use onefile mode to generate a single executable file
         "--windowed",
-        "--name=BingZmac",
+        f"--name=BingZmac_{version}",
         "--icon=icon/Bingz.png",
         "--strip",  # Strip debug symbols to reduce size
         "--add-data=ai_tools.json:.",
@@ -42,7 +63,7 @@ def build_macos():
     subprocess.run(cmd)
     
     print("macOS application packaging completed!")
-    print("Executable location: dist/BingZ Toolkit")
+    print(f"Executable location: dist/BingZmac_{version}")
     print("\nOptimization notes:")
     print("- Used --strip parameter to strip debug symbols")
     print("- Excluded multiple unnecessary modules")
@@ -52,6 +73,8 @@ def build_macos():
 # Windows平台打包
 def build_windows():
 
+    # 获取当前版本号
+    version = get_current_version()
     
     # Windows打包命令（注意：实际在Windows环境中需要使用分号分隔，这里为了兼容macOS环境使用冒号）
     cmd = [
@@ -59,7 +82,7 @@ def build_windows():
         "--onefile",
         "--windowed",
         "--icon=icon/Bingz.png",
-        "--name=BingZwin",
+        f"--name=BingZwin_{version}",
         "--add-data=ai_tools.json:." ,
         "--add-data=icon:icon",
         "ai_tool_manager.py"
@@ -67,7 +90,34 @@ def build_windows():
     
     subprocess.run(cmd)
     
+    print("Windows application packaging completed!")
+    print(f"Executable location: dist/BingZwin_{version}.exe")
 
+# Linux平台打包
+def build_linux():
+    print("Starting Linux application packaging...")
+    
+    # 获取当前版本号
+    version = get_current_version()
+    
+    # Linux打包命令
+    cmd = [
+        "pyinstaller",
+        "--onefile",
+        "--windowed",
+        f"--name=BingZlinux_{version}",
+        "--icon=icon/Bingz.png",
+        "--add-data=ai_tools.json:.",
+        "--add-data=icon:icon",
+        "--noconfirm",
+        "ai_tool_manager.py"
+    ]
+    
+    print(f"Executing command: {' '.join(cmd)}")
+    subprocess.run(cmd)
+    
+    print("Linux application packaging completed!")
+    print(f"Executable location: dist/BingZlinux_{version}")
 
 # 主函数
 def main():
@@ -84,9 +134,13 @@ def main():
         build_macos()
     elif current_platform == "Windows":
         build_windows()
+    elif current_platform == "Linux":
+        build_linux()
     else:
+        print("支持的平台:")
         print("   - macOS (Darwin)")
         print("   - Windows")
+        print("   - Linux")
 
 if __name__ == "__main__":
     main()

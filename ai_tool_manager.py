@@ -269,14 +269,23 @@ class UpdateDialog(QDialog):
         self.update_button.hide()
         self.cancel_button.setText("取消")
         
-        # 创建下载目录
-        download_dir = os.path.join(get_user_data_dir(), "downloads")
-        if not os.path.exists(download_dir):
-            os.makedirs(download_dir)
+        # 获取原程序所在文件夹路径和文件名
+        current_exe = sys.executable
+        exe_dir = os.path.dirname(current_exe)
+        current_exe_name = os.path.basename(current_exe)
         
-        # 设置保存路径
+        # 设置保存路径为原程序文件夹
         asset_name = self.update_data["asset"]["name"]
-        save_path = os.path.join(download_dir, asset_name)
+        save_path = os.path.join(exe_dir, asset_name)
+        
+        # 处理文件名冲突：如果下载的文件与当前运行的程序同名，添加后缀
+        if os.path.basename(save_path) == current_exe_name:
+            # 拆分文件名和扩展名
+            name, ext = os.path.splitext(asset_name)
+            # 添加版本号作为后缀
+            version = self.update_data["version"].lstrip('vV')
+            new_asset_name = f"{name}_{version}{ext}"
+            save_path = os.path.join(exe_dir, new_asset_name)
         
         # 更新进度信号连接
         self.update_checker.download_progress.connect(self.update_progress)
@@ -291,37 +300,8 @@ class UpdateDialog(QDialog):
         self.status_label.setText("更新下载完成！")
         self.cancel_button.setText("关闭")
         
-        try:
-            # 获取当前程序路径
-            current_exe = sys.executable
-            
-            # 确定备份文件路径
-            backup_path = current_exe + ".bak"
-        
-            
-            # 删除旧的备份文件
-            if os.path.exists(backup_path):
-                os.remove(backup_path)
-            
-            # 备份当前程序
-            shutil.copy2(current_exe, backup_path)
-            
-            # 复制新程序覆盖旧程序
-            shutil.copy2(save_path, current_exe)
-            
-            # 添加执行权限（针对Linux/Mac）
-            if sys.platform in ["darwin", "linux"]:
-                import stat
-                st = os.stat(current_exe)
-                os.chmod(current_exe, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-            
-            QMessageBox.information(self, "安装完成", "程序已更新，将重新启动。")
-            
-            # 重启程序
-            os.execv(current_exe, [current_exe] + sys.argv)
-            
-        except Exception as e:
-            QMessageBox.critical(self, "更新失败", f"自动更新安装失败: {str(e)}\n请手动安装。")
+        # 只显示下载完成的提示，不进行自动替换和重启
+        QMessageBox.information(self, "下载完成", f"更新已成功下载到:\n{save_path}\n\n请手动安装更新。")
         
         self.close()
 
