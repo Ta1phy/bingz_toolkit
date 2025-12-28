@@ -1,0 +1,124 @@
+name: Windows平台打包
+
+# 添加权限设置
+permissions:
+  contents: write
+
+# 触发条件：推送到main分支 或 正式发布Release
+on:
+  push:
+    branches: [ master ]  # 仅main分支推送时触发（开发调试用）
+  release:
+    types: [ published ]  # 仅正式发布Release时触发（正式交付用）
+
+jobs:
+  build-windows:
+    # 运行环境：Windows最新版
+    runs-on: windows-latest
+    
+    # 指定Python版本
+    strategy:
+      matrix:
+        python-version: [ '3.13' ]  # 匹配项目的Python版本
+
+    steps:
+      # 步骤1：检出仓库代码到GitHub Actions构建环境
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 步骤2：设置Windows终端编码为UTF-8
+      - name: 设置Windows终端编码
+        run: |
+          chcp 65001  # 切换终端编码为UTF-8
+          set PYTHONIOENCODING=utf-8  # 设置Python环境变量
+        shell: cmd
+
+      # 步骤3：设置指定版本的Python环境，开启pip缓存
+      - name: 设置Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'  # 缓存pip依赖
+
+      # 步骤4：升级pip并安装项目依赖+PyInstaller
+      - name: 安装依赖
+        run: |
+          echo "升级pip..."
+          python -m pip install --upgrade pip
+          echo "安装项目依赖..."
+          pip install -r requirements.txt
+          echo "安装PyInstaller..."
+          pip install pyinstaller
+        shell: cmd
+
+      # 步骤5：运行build.py打包脚本，生成产物到dist/目录
+      - name: 运行打包脚本
+        run: |
+          echo "开始执行build.py..."
+          echo "当前工作目录: %CD%"
+          echo "Python版本:"
+          python --version
+          echo "Python路径: %PYTHON%"
+          
+          rem 运行build.py并保存输出
+          python build.py > build_output.txt 2>&1
+          set BUILD_EXIT_CODE=%ERRORLEVEL%
+          
+          echo ""
+          echo "build.py执行完成，退出码: %BUILD_EXIT_CODE%"
+          echo "build.py输出："
+          type build_output.txt
+          echo ""
+          
+          rem 检查dist目录是否存在
+          echo "检查dist目录："
+          if exist "dist" (
+            echo "✅ dist目录存在！"
+            echo "dist目录内容："
+            dir /s /b dist\*
+          ) else (
+            echo "❌ dist目录不存在！"
+            echo "当前目录内容："
+            dir /b
+            echo "检查是否有其他输出目录："
+            dir /b /ad
+          )
+        shell: cmd
+
+      # 步骤6：上传产物到Artifact（临时存储，开发调试用）
+      - name: 上传临时产物（Artifact）
+        uses: actions/upload-artifact@v4
+        with:
+          name: BingZ-windows
+          path: "dist/"  # 使用相对路径，GitHub Actions会自动处理
+          retention-days: 30  # 产物保留30天
+          if-no-files-found: warn  # 如果没有找到文件，只警告，不失败
+
+      # 步骤7：上传产物到最新Release Assets（仅在Release事件时触发）
+      - name: 获取最新Release标签
+        if: github.event_name == 'release'
+        id: get_latest_release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const releases = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 1
+            });
+            if (releases.data.length > 0) {
+              core.setOutput('tag_name', releases.data[0].tag_name);
+            } else {
+              core.setOutput('tag_name', 'v1.0.0');
+            }
+
+      - name: 上传产物到Release Assets
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_latest_release.outputs.tag_name }}
+          files: "dist/"  # 使用相对路径，GitHub Actions会自动处理
+          overwrite_files: false  # 不覆盖现有资产
+          fail_on_unmatched_files: false  # 避免因文件匹配失败而导致步骤失败
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成的Token

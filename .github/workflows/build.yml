@@ -7,7 +7,7 @@ permissions:
 # 触发条件：推送到main分支 或 正式发布Release
 on:
   push:
-    branches: [ master ]  # 仅main分支推送时触发（开发调试用）
+    branches: [ main ]  # 仅main分支推送时触发（开发调试用）
   release:
     types: [ published ]  # 仅正式发布Release时触发（正式交付用）
 
