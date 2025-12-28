@@ -12,13 +12,14 @@ def get_current_version():
     try:
         with open("ai_tool_manager.py", "r", encoding="utf-8") as f:
             content = f.read()
-        # 匹配self.current_version = "x.x.x"格式（类属性）
-        pattern = r'self\.current_version\s*=\s*"([\d.]+)"'
-        match = re.search(pattern, content)
+        # 优先匹配AIToolManager类中的self.current_version
+        pattern = r'class AIToolManager\(.*?\).*?self\.current_version\s*=\s*"([\d.]+)"'
+        match = re.search(pattern, content, re.DOTALL)
         if match:
             return match.group(1)
-        # 尝试匹配普通current_version = "x.x.x"格式
-        match = re.search(r'current_version\s*=\s*"([\d.]+)"', content)
+        # 尝试匹配普通self.current_version = "x.x.x"格式（类属性）
+        pattern = r'self\.current_version\s*=\s*"([\d.]+)"'
+        match = re.search(pattern, content)
         if match:
             return match.group(1)
         print("警告: 未找到版本号，使用默认值")
@@ -58,8 +59,6 @@ def build_macos():
         "--strip",  # Strip debug symbols to reduce size
         "--add-data=ai_tools.json:.",
         "--add-data=icon:icon",
-        "--debug=import",
-        "--noupx",
         "--noconfirm",  # Avoid confirmation prompts
         "ai_tool_manager.py"
     ]
@@ -71,7 +70,6 @@ def build_macos():
     print(f"Executable location: dist/BingZmac_{version}")
     print("\nOptimization notes:")
     print("- Used --strip parameter to strip debug symbols")
-    print("- Excluded multiple unnecessary modules")
     print("- Set icon to icon/Bingz.png")
     print("- Used onefile mode to generate a single executable file")
 
@@ -81,15 +79,18 @@ def build_windows():
     # 获取当前版本号
     version = get_current_version()
     
-    # Windows打包命令（注意：实际在Windows环境中需要使用分号分隔，这里为了兼容macOS环境使用冒号）
+    # Windows打包命令（Windows环境中必须使用分号作为分隔符）
     cmd = [
         "pyinstaller",
         "--onefile",
         "--windowed",
         "--icon=icon/Bingz.png",
         f"--name=BingZwin_{version}",
-        "--add-data=ai_tools.json:." ,
-        "--add-data=icon:icon",
+        "--add-data=ai_tools.json;." ,
+        "--add-data=icon;icon",
+        "--debug=import",
+        "--noupx",
+        "--noconfirm",
         "ai_tool_manager.py"
     ]
     
