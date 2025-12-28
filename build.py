@@ -88,7 +88,6 @@ def build_windows():
         f"--name=BingZwin_{version}",
         "--add-data=ai_tools.json;." ,
         "--add-data=icon;icon",
-        "--debug=import",
         "--noupx",
         "--noconfirm",
         "ai_tool_manager.py"
