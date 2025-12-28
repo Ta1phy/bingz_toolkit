@@ -12,10 +12,16 @@ def get_current_version():
     try:
         with open("ai_tool_manager.py", "r", encoding="utf-8") as f:
             content = f.read()
-        # 匹配current_version = "x.x.x"格式
+        # 匹配self.current_version = "x.x.x"格式（类属性）
+        pattern = r'self\.current_version\s*=\s*"([\d.]+)"'
+        match = re.search(pattern, content)
+        if match:
+            return match.group(1)
+        # 尝试匹配普通current_version = "x.x.x"格式
         match = re.search(r'current_version\s*=\s*"([\d.]+)"', content)
         if match:
             return match.group(1)
+        print("警告: 未找到版本号，使用默认值")
         return "1.0"  # 默认版本号
     except Exception as e:
         print(f"获取版本号失败: {e}")
@@ -52,10 +58,9 @@ def build_macos():
         "--strip",  # Strip debug symbols to reduce size
         "--add-data=ai_tools.json:.",
         "--add-data=icon:icon",
+        "--debug=import",
+        "--noupx",
         "--noconfirm",  # Avoid confirmation prompts
-        # Only exclude absolutely unnecessary modules to avoid affecting program operation
-        "--exclude-module=tkinter",
-        "--exclude-module=unittest",
         "ai_tool_manager.py"
     ]
     
