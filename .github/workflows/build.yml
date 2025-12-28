@@ -50,17 +50,52 @@ jobs:
           pip install pyinstaller
 
       # 步骤4：运行build.py打包脚本，生成产物到dist/目录
-      - name: 运行打包脚本
-        run: python build.py
+      - name: 运行打包脚本（Windows）
+        if: matrix.os == 'windows-latest'
+        run: |
+          python build.py > build_output.txt 2>&1
+          echo "build.py执行完成，输出已保存到build_output.txt"
+          type build_output.txt
+        shell: cmd
+
+      - name: 运行打包脚本（macOS）
+        if: matrix.os == 'macos-latest'
+        run: |
+          python build.py
+        shell: bash
 
       # 步骤5：添加详细调试信息，检查目录结构
       - name: 检查当前目录结构（所有平台）
+        if: matrix.os == 'windows-latest'
+        run: |
+          echo "当前工作目录: ${{ github.workspace }}"
+          dir
+        shell: cmd
+
+      - name: 检查当前目录结构（macOS）
+        if: matrix.os == 'macos-latest'
         run: |
           echo "当前工作目录: ${{ github.workspace }}"
           ls -la
         shell: bash
 
-      - name: 检查dist目录内容（所有平台）
+      - name: 检查dist目录内容（Windows）
+        if: matrix.os == 'windows-latest'
+        run: |
+          if exist "dist" (
+            echo "dist目录存在，内容："
+            dir dist\
+          ) else (
+            echo "ERROR: dist目录不存在！"
+            echo "当前目录下的所有目录："
+            dir /b /ad
+            echo "执行build.py的输出："
+            type build_output.txt 2>nul || echo "没有build_output.txt"
+          )
+        shell: cmd
+
+      - name: 检查dist目录内容（macOS）
+        if: matrix.os == 'macos-latest'
         run: |
           if [ -d "dist" ]; then
             echo "dist目录存在，内容："
@@ -74,16 +109,29 @@ jobs:
         shell: bash
 
       # 步骤6：上传产物到Artifact（临时存储，开发调试用）
-      - name: 上传临时产物（Artifact）
+      - name: 上传临时产物（Artifact - Windows）
+        if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: BingZ${{ matrix.os }}  # 产物名称区分平台
-          path: |  # 尝试匹配所有可能的输出路径
+          name: BingZwindows-latest
+          path: |
+            dist\*
+            .\dist\*
+            **\dist\*
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: 上传临时产物（Artifact - macOS）
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BingZmacos-latest
+          path: |
             dist/
             ./dist/
             **/dist/*
-          retention-days: 30  # 产物保留30天（默认90天，可按需调整）
-          if-no-files-found: warn  # 如果没有找到文件，只警告，不失败
+          retention-days: 30
+          if-no-files-found: warn
 
       # 步骤7：上传产物到最新Release Assets（push和release事件都触发）
       - name: 获取最新Release标签
@@ -102,15 +150,30 @@ jobs:
               core.setOutput('tag_name', 'v1.0.0'); // 如果没有Release，使用默认标签
             }
 
-      - name: 上传产物到最新Release Assets
+      - name: 上传产物到最新Release Assets（Windows）
+        if: matrix.os == 'windows-latest'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.get_latest_release.outputs.tag_name }}  # 使用最新Release标签
-          files: |  # 匹配所有可能的输出路径
-            dist/*
-            ./dist/*
-            **/dist/*
-          overwrite_files: false  # 关键：不覆盖现有资产，相当于append=true的效果
-          fail_on_unmatched_files: false  # 关键：避免因文件匹配失败而导致步骤失败
+          tag_name: ${{ steps.get_latest_release.outputs.tag_name }}
+          files: |
+            dist\*
+            .\dist\*
+            **\dist\*
+          overwrite_files: false
+          fail_on_unmatched_files: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成，无需手动配置
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上传产物到最新Release Assets（macOS）
+        if: matrix.os == 'macos-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_latest_release.outputs.tag_name }}
+          files: |
+            dist/
+            ./dist/
+            **/dist/*
+          overwrite_files: false
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
