@@ -311,7 +311,7 @@ class AIToolManager(QMainWindow):
         self.tools = []
         
         # 版本信息
-        self.current_version = "1.2"
+        self.current_version = "1.4"
         self.repo_owner = "Ta1phy"
         self.repo_name = "bingz_toolkit"
         
